@@ -151,6 +151,9 @@ Outra decisao importante foi tornar o fluxo de status orientado por **State**:
 
 O motivo dessa escolha foi tirar regra de transicao de `if/else` espalhado no servico e transformar o fluxo em uma regra de dominio explicita e configuravel.
 
+Na pratica, `proximos` funciona como uma **lista de transicoes permitidas** para cada status.  
+Exemplo: se o status atual estiver em `EM_ATENDIMENTO`, ele so pode mudar para os status cadastrados como proximos desse estado. Assim, a regra de fluxo fica no proprio modelo de dominio e no banco (`chamado_status_proximos`), e nao espalhada por condicoes manuais.
+
 Diagrama 1 - State de status (interfaces/classes) e relacao com unidade:
 
 ```mermaid
@@ -262,6 +265,13 @@ classDiagram
   TipoChamado "*" --> "1" StatusChamado : statusInicial
   StatusChamado "1" --> "*" StatusChamado : proximos
 ```
+
+O chamado tem mais de um relacionamento com `User` porque cada vinculo representa uma responsabilidade diferente:
+
+- `solicitante`: usuario que abriu o chamado (origem da demanda);
+- `colaboradorResponsavel`: usuario que assumiu/atende o chamado (execucao do atendimento).
+
+Essa separacao evita misturar papeis de negocio, facilita auditoria de quem pediu x quem atendeu e permite aplicar regras de acesso diferentes para cada papel no fluxo.
 
 ## O que foi configurado
 
