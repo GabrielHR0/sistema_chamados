@@ -1,12 +1,8 @@
 package com.condominio.chamados;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 
-@SpringBootTest
-@ActiveProfiles("test")
-class ChamadosApplicationTests {
+class ChamadosApplicationTests extends AbstractTestcontainersTest {
 
 	@Test
 	void contextLoads() {

@@ -1,5 +1,5 @@
 ---
-name: chamados-scaffold-agent
+name: chamados-scaffold-agent_1
 description: Agent guidance for the current Spring Boot scaffold in this repository.
 ---
 # AGENTS.md — Agente para o scaffold "chamados"

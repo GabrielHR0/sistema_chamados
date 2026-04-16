@@ -1,0 +1,7 @@
+-- V17: replace DISPONIVEL with EM_FUNCIONAMENTO for unidades
+UPDATE unidades
+SET status = 'EM_FUNCIONAMENTO'
+WHERE status = 'DISPONIVEL';
+
+ALTER TABLE unidades
+    ALTER COLUMN status SET DEFAULT 'EM_FUNCIONAMENTO';

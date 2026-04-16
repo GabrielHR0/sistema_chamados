@@ -7,6 +7,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.servlet.ModelAndView;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -41,6 +43,14 @@ public class GlobalExceptionHandler {
 				.map(error -> error.getField() + ": " + error.getDefaultMessage())
 				.orElse("Requisicao invalida");
 		return buildErrorResponse(HttpStatus.BAD_REQUEST, message, request.getRequestURI(), request);
+	}
+
+	@ExceptionHandler({AccessDeniedException.class, AuthorizationDeniedException.class})
+	public Object handleAccessDenied(
+			Exception ex,
+			HttpServletRequest request
+	) {
+		return buildErrorResponse(HttpStatus.FORBIDDEN, "Acesso negado", request.getRequestURI(), request);
 	}
 
 	@ExceptionHandler(NoResourceFoundException.class)

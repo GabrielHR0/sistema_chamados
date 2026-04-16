@@ -3,10 +3,12 @@ services:
     image: postgres:16-alpine
     container_name: chamados-db
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       POSTGRES_DB: ${DB_NAME:-chamados}
-      POSTGRES_USER: ${DB_USER:-chamados}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-chamados}
+      POSTGRES_USER: ${DB_USER:-chamados_dev}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-/}
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
@@ -30,13 +32,47 @@ services:
       DB_URL: jdbc:postgresql://db:5432/${DB_NAME:-chamados}
       DB_USER: ${DB_USER:-chamados}
       DB_PASSWORD: ${DB_PASSWORD:-chamados}
+      APP_UPLOADS_DIR: /app/uploads
       APP_PORT: 8080
     ports:
       - "${APP_PORT:-8080}:8080"
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - chamados_uploads_data:/app/uploads
+
+  db-bootstrap:
+    image: postgres:16-alpine
+    container_name: chamados-db-bootstrap
+    restart: "no"
+    env_file:
+      - .env
+    environment:
+      PGPASSWORD: ${DB_PASSWORD:-chamados_dev_pass}
+    depends_on:
+      db:
+        condition: service_healthy
+      app:
+        condition: service_started
+    volumes:
+      - ./src/main/resources/db/seed:/seed:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "
+      set -e;
+      echo '[db-bootstrap] aguardando flyway...';
+      until psql -w -h db -U ${DB_USER:-chamados_dev} -d ${DB_NAME:-chamados} -tAc \"select count(*) from flyway_schema_history where success = true\" | grep -Eq '^[1-9][0-9]*$'; do
+        sleep 2;
+      done;
+      echo '[db-bootstrap] aplicando auth_bootstrap.sql';
+      psql -w -h db -U ${DB_USER:-chamados_dev} -d ${DB_NAME:-chamados} -v ON_ERROR_STOP=1 -f /seed/auth_bootstrap.sql;
+      echo '[db-bootstrap] aplicando dev_bootstrap.sql';
+      psql -w -h db -U ${DB_USER:-chamados_dev} -d ${DB_NAME:-chamados} -v ON_ERROR_STOP=1 -f /seed/dev_bootstrap.sql;
+      echo '[db-bootstrap] concluido.';
+      "
 
 volumes:
   chamados_postgres_data:
+  chamados_uploads_data:
 
