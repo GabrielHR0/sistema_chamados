@@ -19,3 +19,5 @@ CREATE TABLE IF NOT EXISTS lotacao_tipo_chamado (
 CREATE INDEX IF NOT EXISTS idx_lotacoes_nome ON lotacoes (nome);
 CREATE INDEX IF NOT EXISTS idx_lotacao_tipo_chamado_lotacao_id ON lotacao_tipo_chamado (lotacao_id);
 CREATE INDEX IF NOT EXISTS idx_lotacao_tipo_chamado_tipo_id ON lotacao_tipo_chamado (tipo_id);
+
+DROP TABLE IF EXISTS user_tipo_chamado;

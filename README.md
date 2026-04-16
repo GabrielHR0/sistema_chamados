@@ -14,17 +14,17 @@ O modulo de autenticacao e autorizacao foi implementado com **Spring Security** 
 
 **O que foi usado**
 
-- `SecurityFilterChain` com rotas publicas restritas a login/assets e autenticacao obrigatoria para o restante (`src/main/java/com/condominio/chamados/security/config/SecurityConfig.java`).
-- `CustomUserDetailsService` + `UserPrincipal` para carregar usuario do banco e montar authorities de role e permissao (`src/main/java/com/condominio/chamados/security/service/CustomUserDetailsService.java` e `src/main/java/com/condominio/chamados/security/service/UserPrincipal.java`).
-- `BCryptPasswordEncoder` para hash de senha (`src/main/java/com/condominio/chamados/security/config/SecurityBeans.java`).
-- Modelo RBAC persistido com `roles`, `permissions`, `user_role` e `role_permission` (migrations `V3`, `V4`, `V5`, `V6` em `src/main/resources/db/migration`).
-- Protecao adicional de login com rate limit (`src/main/java/com/condominio/chamados/security/filter/LoginRateLimitFilter.java`).
+- `SecurityFilterChain` com rotas publicas restritas a login/assets e autenticacao obrigatoria para o restante.
+- `CustomUserDetailsService` + `UserPrincipal` para carregar usuario do banco e montar authorities de role e permissao.
+- `BCryptPasswordEncoder` para hash de senha.
+- Modelo RBAC persistido com `roles`, `permissions`, `user_role` e `role_permission`.
+- Protecao adicional de login com rate limit
 
 **Referencia de RBAC no codigo**
 
-- Exemplo por papel: `@PreAuthorize("isAuthenticated() and hasRole('ADMIN')")` em `src/main/java/com/condominio/chamados/audit/controller/AuditController.java`.
-- Exemplo papel + permissao: expressoes `hasAuthority(...)` e `hasAnyRole(...)` centralizadas em `src/main/java/com/condominio/chamados/web/ChamadoController.java`.
-- Catalogo de permissoes no padrao `RESOURCE:ACTION`: `src/main/java/com/condominio/chamados/security/permission/PermissionConstants.java`.
+- Exemplo por papel: `@PreAuthorize("isAuthenticated() and hasRole('ADMIN')")` em.
+- Exemplo papel + permissao: expressoes `hasAuthority(...)` e `hasAnyRole(...)`.
+- Catalogo de permissoes no padrao `RESOURCE:ACTION`.
 
 **Por que essa decisao**
 
@@ -116,7 +116,7 @@ Esses scripts sao idempotentes (podem rodar em todo `up` sem duplicar dados esse
 
 **Credenciais de desenvolvimento criadas pelos scripts**
 
-| Perfil | Username (login) | Senha |
+| Role | Username (login) | Senha |
 | --- | --- | --- |
 | ADMIN | `admin` | `admin123` |
 | COLABORADOR | `colab.manutencao` | `dev123` |
@@ -124,19 +124,97 @@ Esses scripts sao idempotentes (podem rodar em todo `up` sem duplicar dados esse
 | MORADOR | `morador.101` | `dev123` |
 | MORADOR | `morador.102` | `dev123` |
 
-## Front-end em JSP
+## Testes
 
-O setup inicial usa:
+O projeto inclui uma suíte de testes automatizada que cobre unidades, camadas MVC e integrações. As principais bibliotecas utilizadas são:
 
-- JSP como view server-side.
-- JSTL para iteracao e tags padrao.
-- Bootstrap 5 via WebJars para componentes prontos.
+- `spring-boot-starter-test` (JUnit 5, AssertJ, Mockito e suporte do Spring Test)
+- `spring-security-test` (helpers para testes de segurança)
+- `testcontainers` (suporte a containers para testes de integração com Postgres)
+- H2 (banco em memória para testes rápidos)
 
-As views ficam em `src/main/webapp/WEB-INF/jsp/` e o exemplo inicial esta em `/`.
+Os relatórios de execução ficam em `target/surefire-reports/`.
 
-## Executar testes
+Armazenamento de anexos e imagens
+---------------------------------
 
-```powershell
-.\mvnw.cmd test
+Os arquivos enviados pela aplicação (imagens, PDFs e outros anexos) são armazenados em disco no diretório `uploads/` na raiz do projeto durante o desenvolvimento (veja a pasta `uploads/` no repositório). Para evitar colisões e facilitar o gerenciamento, os arquivos são gravados com nomes baseados em UUID; o nome original, tipo MIME, tamanho, dono e vínculo (por exemplo: `Chamado`, `Comentario`, `Usuario`) são persistidos no banco de dados como metadados e referenciam o arquivo físico.
+
+Em produção o caminho de armazenamento é configurável via propriedades da aplicação (`application-*.properties`) — a configuração padrão de desenvolvimento usa a pasta local `uploads/`. O acesso aos anexos é controlado pela camada de aplicação (controllers/serviços) para garantir autorização (RBAC) e não expor diretamente arquivos sensíveis sem checagem.
+
+No Docker Compose, o armazenamento de arquivos funciona assim:
+
+- A aplicação usa `APP_UPLOADS_DIR=/app/uploads`.
+- O serviço `app` monta o volume nomeado `chamados_uploads_data` em `/app/uploads`.
+- Resultado: imagens de perfil e anexos (`user_fotos`, `chamado_anexos`, `comentario_anexos`) continuam salvos mesmo após recriar o container da aplicação.
+- Para limpar os arquivos persistidos, remova o volume (`docker volume rm chamados_chamados_uploads_data`) ou rode `docker compose down -v`.
+
+Usuários e perfis
+-----------------
+
+O modelo de segurança do projeto implementa RBAC (roles + permissions). Resumidamente:
+
+- Usuários (`User`) são associados a um ou mais perfis/papéis (roles) através de uma relação (tabela de junção `user_role`).
+- Cada papel (`Role`) pode agregar várias permissões (`Permission`) — há uma relação `role_permission` que permite mapear capacidades finas além do papel.
+- No código, essas roles e permissions são convertidas em authorities usadas pelo Spring Security para controlar acesso a rotas e ações (anotações como `@PreAuthorize` e expressões `hasAuthority(...)` / `hasRole(...)`).
+
+Essa modelagem permite regras globais por papel (ex.: `ADMIN`, `COLABORADOR`, `MORADOR`) e ajustes finos por permissão quando necessário.
+
+O diagrama abaixo resume essa modelagem RBAC básica:
+
+```plantuml
+@startuml
+title RBAC básico (User, Role, Permission)
+
+class User {
+  +UUID id
+  +String username
+  +String email
+  +String password
+  +boolean enabled
+}
+
+class Role {
+  +UUID id
+  +String name
+  +String description
+}
+
+class Permission {
+  +UUID id
+  +String resource
+  +String action
+  +String description
+}
+
+User "N" -- "N" Role : user_role
+Role "N" -- "N" Permission : role_permission
+@enduml
 ```
 
+.\mvnw.cmd -Dtest=NomeDaClasseDeTeste test
+# ou um método específico
+.\mvnw.cmd -Dtest=NomeDaClasseDeTeste#metodoDeveFazerAlgo test
+```
+
+Testcontainers e Docker
+
+Alguns testes de integração usam Testcontainers para criar um banco Postgres isolado. Para esses testes funcionarem corretamente você precisa ter o Docker em execução na máquina. Caso não queira (ou não possa) rodar Docker localmente, existem opções:
+
+- Executar apenas os testes rápidos que usam H2 (filtrar por pacotes/nomes de testes com `-Dtest=`).
+- Configurar uma profile ou variável de ambiente no projeto para desabilitar testes que usam Testcontainers (se implementado). Neste repositório há dependências de Testcontainers, por isso tenha Docker ativo para executar todas as suítes.
+
+Boas práticas e convenções de teste usadas no projeto
+
+- Testes de unidade usam JUnit 5 e Mockito para mocks e asserts com AssertJ.
+- Testes de camada Spring usam anotações do Spring Test:
+  - `@SpringBootTest` para testes de integração que inicializam o contexto completo;
+  - `@AutoConfigureMockMvc` + `MockMvc` para testar controllers sem abrir servidor HTTP;
+  - `@DataJpaTest` para testes focados em repositórios com um banco em memória;
+  - `@WebMvcTest` para testar controllers isolados com mocks dos beans dependentes.
+- Para testar segurança e endpoints autenticados, usamos `spring-security-test` com `@WithMockUser` ou `SecurityMockMvcRequestPostProcessors`.
+- Testes de integração que dependem do Postgres usam `@Testcontainers` e containers declarados com `@Container` (Testcontainers + JUnit Jupiter).
+
+Onde achar relatórios e saídas
+
+- Resultados do Surefire estão em `target/surefire-reports/` (logs e stacks de falha de cada teste).
