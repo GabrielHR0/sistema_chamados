@@ -32,6 +32,40 @@ O modulo de autenticacao e autorizacao foi implementado com **Spring Security** 
 - A combinacao **role + permissao** permite regra global por perfil e ajuste fino por capacidade sem acoplamento de regra no front.
 - Spring Security reduz codigo customizado de seguranca e mantem o controle de acesso declarativo, rastreavel e testavel.
 
+O diagrama abaixo resume a modelagem RBAC basica:
+
+```mermaid
+classDiagram
+  class User {
+    UUID id
+    String username
+    String email
+    String password
+    boolean enabled
+  }
+
+  class Role {
+    UUID id
+    String name
+    String description
+  }
+
+  class Permission {
+    UUID id
+    String resource
+    String action
+    String description
+  }
+
+  User "*" -- "*" Role : user_role
+  Role "*" -- "*" Permission : role_permission
+```
+
+### Perfil do usuario
+
+A entidade de perfil relacionada ao usuario e `Perfil` (tabela `profiles`), em relacionamento **1:1** com `User` via `user_id`.
+Ela concentra dados cadastrais do usuario (`nomeCompleto`, `cpf`, `telefone`, `dataNascimento`), mantendo autenticacao/autorizacao separadas dos dados pessoais.
+
 ### 2. Blocos e moradias
 
 Esse modulo modela a estrutura do condominio em cadeia (`Bloco` -> `Andar` -> `Unidade`) e separa a ocupacao em uma entidade propria: **`Moradia`**.
@@ -148,54 +182,6 @@ No Docker Compose, o armazenamento de arquivos funciona assim:
 - O serviço `app` monta o volume nomeado `chamados_uploads_data` em `/app/uploads`.
 - Resultado: imagens de perfil e anexos (`user_fotos`, `chamado_anexos`, `comentario_anexos`) continuam salvos mesmo após recriar o container da aplicação.
 - Para limpar os arquivos persistidos, remova o volume (`docker volume rm chamados_chamados_uploads_data`) ou rode `docker compose down -v`.
-
-Usuários e perfis
------------------
-
-O modelo de segurança do projeto implementa RBAC (roles + permissions). Resumidamente:
-
-- Usuários (`User`) são associados a um ou mais perfis/papéis (roles) através de uma relação (tabela de junção `user_role`).
-- Cada papel (`Role`) pode agregar várias permissões (`Permission`) — há uma relação `role_permission` que permite mapear capacidades finas além do papel.
-- No código, essas roles e permissions são convertidas em authorities usadas pelo Spring Security para controlar acesso a rotas e ações (anotações como `@PreAuthorize` e expressões `hasAuthority(...)` / `hasRole(...)`).
-
-Essa modelagem permite regras globais por papel (ex.: `ADMIN`, `COLABORADOR`, `MORADOR`) e ajustes finos por permissão quando necessário.
-
-O diagrama abaixo resume essa modelagem RBAC básica:
-
-```plantuml
-@startuml
-title RBAC básico (User, Role, Permission)
-
-class User {
-  +UUID id
-  +String username
-  +String email
-  +String password
-  +boolean enabled
-}
-
-class Role {
-  +UUID id
-  +String name
-  +String description
-}
-
-class Permission {
-  +UUID id
-  +String resource
-  +String action
-  +String description
-}
-
-User "N" -- "N" Role : user_role
-Role "N" -- "N" Permission : role_permission
-@enduml
-```
-
-.\mvnw.cmd -Dtest=NomeDaClasseDeTeste test
-# ou um método específico
-.\mvnw.cmd -Dtest=NomeDaClasseDeTeste#metodoDeveFazerAlgo test
-```
 
 Testcontainers e Docker
 
