@@ -1,5 +1,8 @@
 # chamados
 
+> [!IMPORTANT]
+> **Como rodar:** use Docker Compose. Va direto para a secao [Subir tudo com Docker Compose](#subir-tudo-com-docker-compose).
+
 ## Descricao do projeto
 
 Aplicacao web de chamados para condominio, com interface server-side em JSP e layout AdminLTE. O sistema organiza a operacao entre moradores, colaboradores e administradores, cobrindo abertura e acompanhamento de chamados, comentarios, anexos, gestao de usuarios, escopo por lotacao/tipo e auditoria de alteracoes.
@@ -81,6 +84,51 @@ Essa separacao foi adotada para nao misturar estado fisico do patrimonio com est
 
 Um ponto critico de consistencia e a criacao de bloco completo: o sistema cria bloco, andares e unidades dentro de uma unica transacao. Se qualquer etapa falhar, tudo e revertido, impedindo cadastro parcial da estrutura.
 
+Diagrama da modelagem de estrutura e ocupacao:
+
+```mermaid
+classDiagram
+  direction TB
+
+  class Bloco {
+    UUID id
+    String identificacao
+    boolean ativo
+  }
+
+  class Andar {
+    UUID id
+    int numero
+    boolean ativo
+  }
+
+  class Unidade {
+    UUID id
+    String identificacao
+    int apartamentoNumero
+    UnidadeStatus status
+    boolean ativo
+  }
+
+  class Moradia {
+    UUID id
+    MoradiaStatus status
+    date dataInicio
+    date dataFim
+  }
+
+  class User {
+    UUID id
+    String username
+    String email
+  }
+
+  Bloco "1" --> "N" Andar : possui
+  Andar "1" --> "N" Unidade : possui
+  Unidade "1" --> "N" Moradia : historico de ocupacao
+  User "1" --> "N" Moradia : ocupa
+```
+
 ### 3. Chamados
 
 O modulo de chamados foi desenhado para separar claramente **quem solicita**, **quem atende** e **como o fluxo evolui**.
@@ -103,6 +151,52 @@ Outra decisao importante foi tornar o fluxo de status orientado por **State**:
 
 O motivo dessa escolha foi tirar regra de transicao de `if/else` espalhado no servico e transformar o fluxo em uma regra de dominio explicita e configuravel.
 
+Diagrama 1 - State de status (interfaces/classes) e relacao com unidade:
+
+```mermaid
+classDiagram
+  direction TB
+
+  class Unidade
+  class Chamado {
+    UUID id
+    String codigo
+    String descricao
+  }
+  class StatusChamado {
+    UUID id
+    String nome
+    StatusComportamentoTipo comportamentoTipo
+  }
+  class StatusComportamentoTipo {
+    <<enumeration>>
+    INICIAL
+    INTERMEDIARIO
+    FINAL
+  }
+
+  class EstadoBehavior {
+    <<interface>>
+    +getTipo()
+    +validarProximo(statusAtual, proximo)
+    +validarProximosConfigurados(statusAtual, proximos)
+  }
+  class EstadoInicialBehavior
+  class EstadoIntermediarioBehavior
+  class EstadoFinalBehavior
+  class EstadoBehaviorFactory
+
+  Chamado --> Unidade : unidade
+  Chamado --> StatusChamado : status
+  StatusChamado --> EstadoBehavior : getBehavior()
+  StatusChamado --> StatusComportamentoTipo : comportamentoTipo
+  StatusChamado "1" --> "*" StatusChamado : proximos
+  EstadoBehavior <|.. EstadoInicialBehavior
+  EstadoBehavior <|.. EstadoIntermediarioBehavior
+  EstadoBehavior <|.. EstadoFinalBehavior
+  EstadoBehaviorFactory ..> EstadoBehavior : fromTipo(tipo)
+```
+
 Na abertura do chamado, o status inicial e automatico: o `TipoChamado` tem seu `status_inicial` proprio. Assim, o create nao depende de escolha manual de status e cada tipo ja nasce no ponto correto do fluxo.
 
 Sobre escopo de atendimento, a arquitetura adotou **lotacao como unidade de capacidade operacional**:
@@ -118,6 +212,56 @@ No banco, isso fica materializado por tabelas de relacao (`lotacao_tipo_chamado`
 Tambem foi mantido o historico conversacional do chamado com comentarios e anexos em entidades proprias, para preservar contexto de atendimento e evidencias sem inflar a entidade principal.
 
 Em arquitetura da solucao, as regras ficam concentradas na camada de servico, enquanto controllers cuidam do fluxo MVC e repositories aplicam consultas com escopo. Operacoes criticas de criacao/atualizacao rodam em transacao para manter consistencia entre chamado, status e anexos.
+
+Diagrama 2 - Chamado e seus relacionamentos:
+
+```mermaid
+classDiagram
+  direction TB
+
+  class Chamado {
+    UUID id
+    String codigo
+    String descricao
+    OffsetDateTime dataCriacao
+    OffsetDateTime dataFinalizacao
+  }
+  class Unidade
+  class TipoChamado {
+    UUID id
+    String titulo
+    Integer slaHoras
+  }
+  class StatusChamado
+  class User
+  class ComentarioChamado {
+    UUID id
+    String comentario
+    OffsetDateTime dataCriacao
+  }
+  class ChamadoAnexo {
+    UUID id
+    String nomeOriginal
+    String nomeArquivo
+  }
+  class ComentarioAnexo {
+    UUID id
+    String nomeOriginal
+    String nomeArquivo
+  }
+
+  Chamado --> Unidade : unidade
+  Chamado --> TipoChamado : tipo
+  Chamado --> StatusChamado : status
+  Chamado --> User : solicitante
+  Chamado --> User : colaboradorResponsavel
+  Chamado "1" --> "*" ComentarioChamado : comentarios
+  ComentarioChamado --> User : autor
+  ChamadoAnexo "*" --> "1" Chamado : chamado
+  ComentarioAnexo "*" --> "1" ComentarioChamado : comentario
+  TipoChamado "*" --> "1" StatusChamado : statusInicial
+  StatusChamado "1" --> "*" StatusChamado : proximos
+```
 
 ## O que foi configurado
 
